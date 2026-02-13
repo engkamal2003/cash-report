@@ -1,0 +1,998 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>لوحة تقارير الصندوق (مبسّطة) | إدخال + تقارير + تصدير Excel/PDF</title>
+
+  <!-- SheetJS (XLSX) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- PDF Export (renders report as image; Arabic-safe) -->
+  <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
+
+  <style>
+    :root{
+      --bg:#0b1220; --card:#101a2f; --muted:#90a0bf; --text:#e7eefc; --line:#243352;
+      --accent:#4cc9f0; --accent2:#80ed99; --danger:#ff5d5d; --warn:#ffd166; --ink:#0b1428;
+      --white:#ffffff; --shadow:0 10px 30px rgba(0,0,0,.25);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:linear-gradient(180deg,#080e1a,#0b1220);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial}
+    .wrap{max-width:1280px;margin:18px auto;padding:0 14px}
+    .top{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+    h1{margin:0;font-size:20px;line-height:1.4}
+    .hint{color:var(--muted);font-size:13px;line-height:1.7;margin-top:4px}
+    .chip{display:inline-flex;gap:8px;align-items:center;padding:6px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted);font-size:12px;background:rgba(16,26,47,.6)}
+
+    .tabs{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+    .tabbtn{
+      padding:10px 12px;border-radius:14px;border:1px solid var(--line);
+      background:rgba(11,20,40,.55);color:var(--text);cursor:pointer;font-weight:900;
+    }
+    .tabbtn.active{background:linear-gradient(90deg,var(--accent),#4895ef);border:none}
+
+    .grid{display:grid;grid-template-columns:1fr;gap:12px;margin-top:12px}
+    @media(min-width:980px){.grid{grid-template-columns:430px 1fr}}
+
+    .card{background:rgba(16,26,47,.88);border:1px solid var(--line);border-radius:16px;padding:14px;box-shadow:var(--shadow)}
+    label{display:block;color:var(--muted);font-size:12px;margin:10px 0 6px}
+    input, select, button, textarea{
+      width:100%; padding:10px 12px; border-radius:12px; border:1px solid var(--line);
+      background:var(--ink); color:var(--text); outline:none;
+    }
+    textarea{min-height:70px;resize:vertical}
+    input::placeholder{color:#5f6b85}
+    button{cursor:pointer;font-weight:900}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+    .btns2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+    .btns3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px}
+
+    .primary{background:linear-gradient(90deg,var(--accent),#4895ef);border:none}
+    .success{background:linear-gradient(90deg,var(--accent2),#52b788);border:none;color:#04130a}
+    .secondary{background:rgba(11,20,40,.55)}
+    .danger{background:linear-gradient(90deg,var(--danger),#ff8fab);border:none}
+    .warn{background:linear-gradient(90deg,var(--warn),#fcbf49);border:none;color:#1a1200}
+
+    .small{font-size:12px;color:var(--muted);line-height:1.7;margin-top:10px}
+    .hr{border:none;border-top:1px solid var(--line);margin:12px 0}
+    details{border:1px solid var(--line);border-radius:14px;padding:10px;background:rgba(11,20,40,.4);margin-top:10px}
+    summary{cursor:pointer;font-weight:900;color:var(--text)}
+
+    .tablewrap{overflow:auto;border-radius:16px;border:1px solid var(--line)}
+    table{border-collapse:separate;border-spacing:0;min-width:980px;width:100%}
+    thead th{position:sticky;top:0;background:#0e1a33;border-bottom:1px solid var(--line);padding:10px;font-size:12px;color:var(--muted);text-align:right;white-space:nowrap}
+    tbody td{padding:10px;border-bottom:1px solid rgba(36,51,82,.6);font-size:13px;white-space:nowrap}
+    tbody tr:hover{background:rgba(76,201,240,.08)}
+    tbody tr.selected{outline:2px solid var(--accent);background:rgba(76,201,240,.12)}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted);font-size:12px}
+
+    .stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+    .stat{border:1px solid var(--line);border-radius:14px;padding:10px;background:rgba(11,20,40,.6)}
+    .stat .k{color:var(--muted);font-size:12px}
+    .stat .v{font-size:18px;font-weight:900;margin-top:4px}
+
+    /* Report area */
+    .report{
+      background:var(--white); color:#0b1220; border-radius:16px; padding:18px; border:1px solid #e5e7eb;
+    }
+    .report h2{margin:0 0 10px;font-size:20px;text-align:center}
+    .report .meta{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;color:#334155;font-size:12px;margin-bottom:10px}
+    .report .meta div{display:flex;gap:8px;align-items:center}
+    .report .badge{display:inline-block;padding:3px 8px;border:1px solid #cbd5e1;border-radius:999px}
+    .report table{min-width:0;width:100%;border-collapse:collapse}
+    .report th,.report td{border:1px solid #e5e7eb;padding:8px;text-align:right;font-size:12px;vertical-align:top}
+    .report th{background:#f8fafc;color:#334155}
+    .report .totals{margin-top:10px;display:flex;gap:12px;justify-content:flex-end;font-weight:900}
+    .muted{color:#64748b}
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <h1>لوحة تقارير الصندوق (مبسّطة)</h1>
+        <div class="hint">
+          ركّزنا على شيئين فقط: <b>إدخال البيانات</b> و <b>إخراج التقارير</b> (مع تصدير Excel و PDF).<br/>
+          • ابدأ إمّا برفع ملف Excel، أو ابدأ من صفحة فاضية وأدخل السجلات يدويًا.
+        </div>
+      </div>
+      <div class="chip" id="status">جاهز</div>
+    </div>
+
+    <div class="tabs">
+      <button class="tabbtn active" id="tabEntry">1) إدخال البيانات</button>
+      <button class="tabbtn" id="tabReports">2) التقارير</button>
+      <button class="tabbtn" id="tabExport">3) التصدير</button>
+      <span class="pill" id="dataPill">لا يوجد بيانات بعد</span>
+    </div>
+
+    <div class="grid">
+      <!-- Left: actions -->
+      <div class="card" id="leftCard">
+        <!-- ENTRY TAB -->
+        <div class="tabpanel" id="panelEntry">
+          <label>مصدر البيانات</label>
+          <div class="btns2">
+            <button class="primary" id="btnStartEmpty">ابدأ بدون Excel</button>
+            <button class="secondary" id="btnUpload">رفع Excel</button>
+          </div>
+          <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none"/>
+
+          <div class="small" style="margin-top:8px">
+            ✅ بعد رفع Excel، سيتم استيراد البيانات تلقائياً (بدون أي إعدادات).<br/>
+            ✅ ويمكنك بعدها الإضافة/التعديل/الحذف ثم استخراج تقارير.
+          </div>
+
+          <hr class="hr"/>
+
+          <label>نموذج إدخال/تعديل سجل</label>
+          <div class="row">
+            <div>
+              <label>تاريخ الدفع</label>
+              <input type="date" id="f_payDate" />
+            </div>
+            <div>
+              <label>رقم الاعتماد</label>
+              <input id="f_credit" placeholder="مثال: 12345" />
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label>المبلغ</label>
+              <input id="f_amount" placeholder="مثال: 1500" />
+            </div>
+            <div>
+              <label>رقم السيارة</label>
+              <input id="f_carNo" placeholder="مثال: 2748" />
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label>المشروع/الموقع</label>
+              <input id="f_project" placeholder="مثال: مكان التحميل / رقم المشروع" />
+            </div>
+            <div>
+              <label>اسم الصنف</label>
+              <input id="f_itemName" placeholder="مثال: شاحنة / معدات..." />
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label>اسم المانح</label>
+              <input id="f_donorName" placeholder="اسم المانح" />
+            </div>
+            <div>
+              <label>المقاول (شركة النقل)</label>
+              <input id="f_contractorName" placeholder="اسم المقاول/الشركة" />
+            </div>
+          </div>
+
+          <details>
+            <summary>تفاصيل التحاسب (اختياري — لتقرير السيارة)</summary>
+            <div class="row">
+              <div>
+                <label>بداية الاحتساب</label>
+                <input type="date" id="f_calcStart" />
+              </div>
+              <div>
+                <label>تاريخ التحاسب</label>
+                <input type="date" id="f_calcEnd" />
+              </div>
+            </div>
+            <div class="row">
+              <div>
+                <label>عدد الأيام</label>
+                <input id="f_days" placeholder="مثال: 3" />
+              </div>
+              <div>
+                <label>الحالة</label>
+                <input id="f_status" placeholder="مثال: تم / معلّق" />
+              </div>
+            </div>
+          </details>
+
+          <details>
+            <summary>المصروفات (اختياري)</summary>
+            <div class="row">
+              <div>
+                <label>الميزان</label>
+                <input id="f_exp_balance" placeholder="0" />
+              </div>
+              <div>
+                <label>أجرة النقل</label>
+                <input id="f_exp_transport" placeholder="0" />
+              </div>
+            </div>
+            <div class="row">
+              <div>
+                <label>البياتات</label>
+                <input id="f_exp_overnight" placeholder="0" />
+              </div>
+              <div>
+                <label>تنسيقات</label>
+                <input id="f_exp_formatting" placeholder="0" />
+              </div>
+            </div>
+          </details>
+
+          <details>
+            <summary>البيان النصي (ملاحظات)</summary>
+            <textarea id="f_notes" placeholder="أي ملاحظات تريدها تظهر في البيان النصي..."></textarea>
+          </details>
+
+          <div class="btns3">
+            <button class="secondary" id="btnNew">جديد</button>
+            <button class="success" id="btnSave">حفظ (إضافة/تعديل)</button>
+            <button class="danger" id="btnDelete">حذف</button>
+          </div>
+
+          <div class="small" id="formHint">اختر صف من الجدول لتعديله، أو املأ الحقول واضغط حفظ.</div>
+        </div>
+
+        <!-- REPORTS TAB -->
+        <div class="tabpanel" id="panelReports" style="display:none">
+          <label>نوع التقرير</label>
+          <select id="reportType">
+            <option value="cash">تقرير الصندوق</option>
+            <option value="car">تقرير سيارة معينة</option>
+            <option value="credit">تقرير رقم اعتماد</option>
+            <option value="date">تقرير حسب التاريخ</option>
+          </select>
+
+          <div class="small">ملاحظة: نفس الفلاتر بالأسفل تعمل مع كل التقارير.</div>
+
+          <hr class="hr"/>
+
+          <label>فلاتر سريعة (اترك ما لا تحتاجه فارغ)</label>
+          <div class="row">
+            <div>
+              <label>من تاريخ</label>
+              <input type="date" id="fltFrom" />
+            </div>
+            <div>
+              <label>إلى تاريخ</label>
+              <input type="date" id="fltTo" />
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label>رقم الاعتماد</label>
+              <input id="fltCredit" placeholder="مثال: 12345" />
+            </div>
+            <div>
+              <label>رقم السيارة</label>
+              <input id="fltCar" placeholder="مثال: 2748" />
+            </div>
+          </div>
+
+          <div class="btns3">
+            <button class="primary" id="btnMakeReport">توليد التقرير</button>
+            <button class="secondary" id="btnClearFilters">مسح الفلاتر</button>
+            <button class="warn" id="btnCalcTotal">احسب إجمالي المبلغ</button>
+          </div>
+
+          <div class="stats">
+            <div class="stat">
+              <div class="k">عدد السجلات بعد الفلترة</div>
+              <div class="v" id="kpiCount">0</div>
+            </div>
+            <div class="stat">
+              <div class="k">إجمالي المبلغ</div>
+              <div class="v" id="kpiSum">0</div>
+            </div>
+          </div>
+
+          <div class="small">
+            • تقرير السيارة سيعرض: المشروع/الموقع + التواريخ + عدد الأيام + أيام التحاسب (محسوبة) + الإجماليات.
+          </div>
+        </div>
+
+        <!-- EXPORT TAB -->
+        <div class="tabpanel" id="panelExport" style="display:none">
+          <label>ماذا تريد تصديره؟</label>
+          <div class="small">التصدير يعتمد على “آخر تقرير تم توليده”.</div>
+
+          <div class="btns3" style="margin-top:12px">
+            <button class="secondary" id="btnExportExcel">تصدير Excel</button>
+            <button class="secondary" id="btnExportPDF">تصدير PDF</button>
+            <button class="secondary" id="btnPrint">طباعة</button>
+          </div>
+
+          <hr class="hr"/>
+
+          <label>حفظ/استرجاع (اختياري)</label>
+          <div class="small">حتى لو قفلت الصفحة، تقدر تحفظ نسخة JSON من بياناتك وترجعها لاحقاً.</div>
+          <div class="btns2" style="margin-top:10px">
+            <button class="success" id="btnSaveJson">حفظ JSON</button>
+            <button class="secondary" id="btnLoadJson">استيراد JSON</button>
+          </div>
+          <input type="file" id="jsonInput" accept=".json" style="display:none"/>
+        </div>
+      </div>
+
+      <!-- Right: table + report -->
+      <div class="card">
+        <div class="row" style="align-items:end">
+          <div>
+            <label>بحث سريع داخل البيانات</label>
+            <input id="quickSearch" placeholder="اكتب رقم سيارة أو اعتماد أو اسم مانح..." />
+          </div>
+          <div>
+            <label>عرض</label>
+            <select id="tableMode">
+              <option value="simple">عرض مبسّط</option>
+              <option value="full">عرض كامل</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="tablewrap" style="margin-top:10px">
+          <table>
+            <thead><tr id="theadRow"></tr></thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+
+        <div style="margin-top:12px">
+          <span class="pill">منطقة التقرير (للـ PDF والطباعة)</span>
+          <div id="reportArea" class="report" style="margin-top:10px;display:none">
+            <h2 id="reportTitle">تقرير</h2>
+            <div class="meta" id="reportMeta"></div>
+            <div id="reportBody"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // ========= Helpers =========
+  const $ = (id) => document.getElementById(id);
+  const statusEl = $("status");
+  const dataPill = $("dataPill");
+
+  function setStatus(t){ statusEl.textContent = t; }
+  function setDataPill(){ dataPill.textContent = data.length ? `عدد السجلات: ${data.length}` : "لا يوجد بيانات بعد"; }
+
+  function todayISO(){
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,"0");
+    const dd= String(d.getDate()).padStart(2,"0");
+    return `${y}-${m}-${dd}`;
+  }
+
+  function fmtDate(v){
+    if(!v) return "";
+    if(v instanceof Date && !isNaN(v)){
+      const y=v.getFullYear(), m=String(v.getMonth()+1).padStart(2,"0"), d=String(v.getDate()).padStart(2,"0");
+      return `${y}-${m}-${d}`;
+    }
+    const s = String(v).trim();
+    if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const d = new Date(s);
+    if(!isNaN(d)) return fmtDate(d);
+    return s;
+  }
+
+  function toDate(v){
+    if(!v) return null;
+    if(v instanceof Date && !isNaN(v)) return v;
+    const s = String(v).trim();
+    const d = new Date(s);
+    return isNaN(d) ? null : d;
+  }
+
+  function toNum(v){
+    if(v===null||v===undefined) return 0;
+    const s = String(v).replace(/,/g,"").trim();
+    const n = Number(s);
+    return isFinite(n) ? n : 0;
+  }
+
+  function diffDaysISO(aISO, bISO){
+    const a = toDate(aISO), b = toDate(bISO);
+    if(!a || !b) return "";
+    const days = Math.round((b-a)/(1000*60*60*24));
+    return isFinite(days) ? String(days) : "";
+  }
+
+  // ========= Data =========
+  let data = [];
+  let selectedId = null;
+
+  function emptyRec(){
+    return {
+      id: crypto.randomUUID(),
+      payDate: "", credit:"", amount:"", carNo:"", project:"",
+      itemName:"", donorName:"", contractorName:"",
+      calcStart:"", calcEnd:"", days:"", status:"",
+      exp_balance:"", exp_transport:"", exp_overnight:"", exp_formatting:"",
+      notes:""
+    };
+  }
+
+  // ========= Excel import (auto mapping) =========
+  function pick(obj, keys){
+    for(const k of keys){
+      if(obj[k] !== undefined && obj[k] !== null && String(obj[k]).trim()!=="") return obj[k];
+      const hit = Object.keys(obj).find(h => h.includes(k));
+      if(hit && obj[hit] !== undefined) return obj[hit];
+    }
+    return "";
+  }
+
+  function normalizeFromExcel(row){
+    const r = emptyRec();
+    r.payDate = fmtDate(pick(row, ["تاريخ الدفع","التاريخ","تاريخ"]));
+    r.credit  = String(pick(row, ["رقم الاعتماد","الاعتماد","رقم"]) ?? "");
+    r.amount  = String(pick(row, ["اجمالي المبلغ","إجمالي المبلغ","المبلغ","اجمالي"]) ?? "");
+    r.carNo   = String(pick(row, ["رقم السيارة","سيارة"]) ?? "");
+    r.project = String(pick(row, ["رقم المشروع","المشروع","مكان التحميل","الموقع"]) ?? "");
+    r.itemName= String(pick(row, ["اسم الصنف","نوع السيارة","الصنف"]) ?? "");
+    r.donorName=String(pick(row, ["اسم المانح","المانح"]) ?? "");
+    r.contractorName=String(pick(row, ["المقاول","شركة النقل","الناقل"]) ?? "");
+    r.calcStart=fmtDate(pick(row, ["بداية الاحتساب","بداية التحاسب"]) );
+    r.calcEnd  =fmtDate(pick(row, ["تاريخ التحاسب","نهاية الاحتساب"]) );
+    r.days     =String(pick(row, ["عدد الايام","عدد الأيام","الايام"]) ?? "");
+    r.status   =String(pick(row, ["الحالة"]) ?? "");
+    r.exp_overnight = String(pick(row, ["اجرة البيات","أجرة البيات","البيات"]) ?? "");
+    r.exp_balance   = String(pick(row, ["الميزان"]) ?? "");
+    r.exp_transport = String(pick(row, ["اجرة النقل","أجرة النقل"]) ?? "");
+    r.exp_formatting= String(pick(row, ["تنسيقات"]) ?? "");
+    r.notes = String(pick(row, ["البيان النصي","ملاحظات","بيان"]) ?? "");
+    return r;
+  }
+
+  // ========= Tabs =========
+  function setTab(which){
+    const tabs = ["Entry","Reports","Export"];
+    tabs.forEach(t=>{
+      $("tab"+t).classList.toggle("active", t===which);
+      $("panel"+t).style.display = (t===which) ? "block" : "none";
+    });
+  }
+  $("tabEntry").onclick = ()=> setTab("Entry");
+  $("tabReports").onclick = ()=> setTab("Reports");
+  $("tabExport").onclick = ()=> setTab("Export");
+
+  // ========= Form =========
+  function formToRec(rec){
+    rec.payDate = $("f_payDate").value || "";
+    rec.credit  = $("f_credit").value || "";
+    rec.amount  = $("f_amount").value || "";
+    rec.carNo   = $("f_carNo").value || "";
+    rec.project = $("f_project").value || "";
+    rec.itemName= $("f_itemName").value || "";
+    rec.donorName = $("f_donorName").value || "";
+    rec.contractorName = $("f_contractorName").value || "";
+    rec.calcStart = $("f_calcStart").value || "";
+    rec.calcEnd = $("f_calcEnd").value || "";
+    rec.days = $("f_days").value || "";
+    rec.status = $("f_status").value || "";
+    rec.exp_balance = $("f_exp_balance").value || "";
+    rec.exp_transport= $("f_exp_transport").value || "";
+    rec.exp_overnight= $("f_exp_overnight").value || "";
+    rec.exp_formatting= $("f_exp_formatting").value || "";
+    rec.notes = $("f_notes").value || "";
+  }
+
+  function recToForm(rec){
+    $("f_payDate").value = rec.payDate || "";
+    $("f_credit").value = rec.credit || "";
+    $("f_amount").value = rec.amount || "";
+    $("f_carNo").value = rec.carNo || "";
+    $("f_project").value = rec.project || "";
+    $("f_itemName").value = rec.itemName || "";
+    $("f_donorName").value = rec.donorName || "";
+    $("f_contractorName").value = rec.contractorName || "";
+    $("f_calcStart").value = rec.calcStart || "";
+    $("f_calcEnd").value = rec.calcEnd || "";
+    $("f_days").value = rec.days || "";
+    $("f_status").value = rec.status || "";
+    $("f_exp_balance").value = rec.exp_balance || "";
+    $("f_exp_transport").value = rec.exp_transport || "";
+    $("f_exp_overnight").value = rec.exp_overnight || "";
+    $("f_exp_formatting").value = rec.exp_formatting || "";
+    $("f_notes").value = rec.notes || "";
+  }
+
+  function clearForm(){
+    selectedId = null;
+    const fresh = emptyRec();
+    fresh.payDate = todayISO();
+    recToForm(fresh);
+    $("formHint").textContent = "تم تفريغ النموذج. اكتب البيانات واضغط حفظ لإضافة سجل جديد.";
+    [...$("tbody").querySelectorAll("tr")].forEach(tr=>tr.classList.remove("selected"));
+  }
+
+  // ========= Table =========
+  const theadRow = $("theadRow");
+  const tbody = $("tbody");
+
+  function statement(rec){
+    const parts = [
+      rec.project && `المشروع/الموقع: ${rec.project}`,
+      rec.contractorName && `المقاول/شركة النقل: ${rec.contractorName}`,
+      rec.donorName && `المانح: ${rec.donorName}`,
+      rec.carNo && `السيارة: ${rec.carNo}`,
+      rec.itemName && `الصنف: ${rec.itemName}`,
+      rec.status && `الحالة: ${rec.status}`,
+      rec.notes && `ملاحظات: ${rec.notes}`
+    ].filter(Boolean);
+    return parts.join(" | ") || "—";
+  }
+
+  function getVisibleCols(){
+    const mode = $("tableMode").value;
+    const base = [
+      ["payDate","تاريخ الدفع"],
+      ["credit","رقم الاعتماد"],
+      ["amount","المبلغ"],
+      ["carNo","رقم السيارة"],
+      ["project","المشروع/الموقع"],
+      ["donorName","المانح"],
+      ["contractorName","المقاول"]
+    ];
+    if(mode==="simple") return base;
+    return base.concat([
+      ["calcStart","بداية الاحتساب"],
+      ["calcEnd","تاريخ التحاسب"],
+      ["days","عدد الأيام"],
+      ["calcDays","أيام التحاسب (محسوبة)"],
+      ["exp_overnight","البياتات"],
+      ["exp_balance","الميزان"],
+      ["exp_transport","أجرة النقل"],
+      ["exp_formatting","تنسيقات"],
+      ["itemName","اسم الصنف"],
+      ["status","الحالة"],
+      ["statement","البيان النصي"]
+    ]);
+  }
+
+  function filterByQuickSearch(list){
+    const q = $("quickSearch").value.trim().toLowerCase();
+    if(!q) return list;
+    return list.filter(r=>{
+      const blob = [r.payDate,r.credit,r.amount,r.carNo,r.project,r.itemName,r.donorName,r.contractorName,r.status,r.notes, statement(r)]
+        .join(" ").toLowerCase();
+      return blob.includes(q);
+    });
+  }
+
+  function renderTable(){
+    const cols = getVisibleCols();
+    theadRow.innerHTML = "";
+    cols.forEach(([_, label])=>{
+      const th = document.createElement("th");
+      th.textContent = label;
+      theadRow.appendChild(th);
+    });
+
+    tbody.innerHTML = "";
+    const list = filterByQuickSearch(data);
+
+    list.forEach(rec=>{
+      const tr = document.createElement("tr");
+      tr.dataset.id = rec.id;
+      if(rec.id===selectedId) tr.classList.add("selected");
+
+      tr.onclick = ()=>{
+        selectedId = rec.id;
+        [...tbody.querySelectorAll("tr")].forEach(x=>x.classList.remove("selected"));
+        tr.classList.add("selected");
+        recToForm(rec);
+        $("formHint").textContent = "هذا الصف محدد للتعديل. عدّل ثم اضغط حفظ.";
+        setTab("Entry");
+        window.scrollTo({top:0, behavior:"smooth"});
+      };
+
+      cols.forEach(([key])=>{
+        const td = document.createElement("td");
+        if(key==="calcDays") td.textContent = diffDaysISO(rec.calcStart, rec.calcEnd) || "";
+        else if(key==="statement") td.textContent = statement(rec);
+        else td.textContent = rec[key] ?? "";
+        tr.appendChild(td);
+      });
+
+      tbody.appendChild(tr);
+    });
+
+    setDataPill();
+  }
+
+  $("tableMode").onchange = renderTable;
+  $("quickSearch").oninput = renderTable;
+
+  // ========= CRUD =========
+  $("btnNew").onclick = clearForm;
+
+  $("btnSave").onclick = ()=>{
+    const temp = emptyRec();
+    formToRec(temp);
+
+    if(!temp.payDate && !temp.credit && !temp.amount){
+      alert("أدخل على الأقل: تاريخ الدفع أو رقم الاعتماد أو المبلغ.");
+      return;
+    }
+
+    if(selectedId){
+      const rec = data.find(x=>x.id===selectedId);
+      if(rec){
+        formToRec(rec);
+        renderTable();
+        setStatus("تم حفظ التعديل ✅");
+        return;
+      }
+    }
+
+    temp.id = crypto.randomUUID();
+    data.unshift(temp);
+    selectedId = temp.id;
+    renderTable();
+    setStatus("تمت الإضافة ✅");
+  };
+
+  $("btnDelete").onclick = ()=>{
+    if(!selectedId){
+      alert("اختر صفاً من الجدول أولاً للحذف.");
+      return;
+    }
+    if(!confirm("هل أنت متأكد من حذف السجل المحدد؟")) return;
+
+    data = data.filter(x=>x.id!==selectedId);
+    selectedId = null;
+    clearForm();
+    renderTable();
+    setStatus("تم الحذف ✅");
+  };
+
+  // ========= Start / Upload =========
+  $("btnStartEmpty").onclick = ()=>{
+    data = [];
+    selectedId = null;
+    clearForm();
+    renderTable();
+    setStatus("بدأت قاعدة بيانات جديدة ✅");
+  };
+
+  $("btnUpload").onclick = ()=> $("fileInput").click();
+
+  $("fileInput").addEventListener("change", async (e)=>{
+    const file = e.target.files?.[0];
+    if(!file) return;
+
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:"array", cellDates:true});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, {defval:"", raw:true});
+
+    const imported = rows.map(normalizeFromExcel).filter(r=>{
+      const blob = [r.payDate,r.credit,r.amount,r.carNo,r.project,r.donorName,r.contractorName,r.itemName,r.notes].join("").trim();
+      return blob.length>0;
+    });
+
+    data = imported;
+    selectedId = null;
+    clearForm();
+    renderTable();
+    setStatus(`تم الاستيراد من Excel ✅ (${data.length} سجل)`);
+  });
+
+  // ========= Reports =========
+  const reportArea = $("reportArea");
+  const reportTitle = $("reportTitle");
+  const reportMeta = $("reportMeta");
+  const reportBody = $("reportBody");
+
+  function metaLine(label, value){
+    const div = document.createElement("div");
+    div.innerHTML = `<span class="badge">${label}</span><span>${value || "—"}</span>`;
+    return div;
+  }
+
+  function filtered(){
+    const from = $("fltFrom").value;
+    const to = $("fltTo").value;
+    const credit = $("fltCredit").value.trim();
+    const car = $("fltCar").value.trim();
+
+    return data.filter(r=>{
+      if(credit && !String(r.credit||"").includes(credit)) return false;
+      if(car && !String(r.carNo||"").includes(car)) return false;
+
+      if(from){
+        const d = toDate(r.payDate);
+        const df = toDate(from);
+        if(!d || !df || d < df) return false;
+      }
+      if(to){
+        const d = toDate(r.payDate);
+        const dt = toDate(to);
+        if(!d || !dt || d > dt) return false;
+      }
+      return true;
+    });
+  }
+
+  function sumAmount(list){
+    return list.reduce((acc,r)=> acc + toNum(r.amount), 0);
+  }
+
+  function makeTable(headers, rows){
+    const table = document.createElement("table");
+    const thead = document.createElement("thead");
+    const trh = document.createElement("tr");
+    headers.forEach(h=>{
+      const th = document.createElement("th");
+      th.textContent = h;
+      trh.appendChild(th);
+    });
+    thead.appendChild(trh);
+
+    const tb = document.createElement("tbody");
+    rows.forEach(r=>{
+      const tr = document.createElement("tr");
+      headers.forEach(h=>{
+        const td = document.createElement("td");
+        td.textContent = r[h] ?? "";
+        tr.appendChild(td);
+      });
+      tb.appendChild(tr);
+    });
+    table.appendChild(thead);
+    table.appendChild(tb);
+    return table;
+  }
+
+  function buildMeta(list){
+    reportMeta.innerHTML = "";
+    reportMeta.appendChild(metaLine("تاريخ إنشاء التقرير", new Date().toLocaleString("ar-EG")));
+    reportMeta.appendChild(metaLine("عدد السجلات", String(list.length)));
+    reportMeta.appendChild(metaLine("إجمالي المبلغ", sumAmount(list).toLocaleString("en-US")));
+    reportMeta.appendChild(metaLine("فلتر من/إلى", `${$("fltFrom").value || "…"} → ${$("fltTo").value || "…"}`));
+    reportMeta.appendChild(metaLine("رقم الاعتماد", $("fltCredit").value || "—"));
+    reportMeta.appendChild(metaLine("رقم السيارة", $("fltCar").value || "—"));
+  }
+
+  function totalsBox(list, includeDays=false){
+    const wrap = document.createElement("div");
+    wrap.className = "totals";
+    const total = sumAmount(list).toLocaleString("en-US");
+
+    if(includeDays){
+      let daysSum = 0, calcDaysSum = 0;
+      list.forEach(r=>{
+        daysSum += toNum(r.days);
+        calcDaysSum += toNum(diffDaysISO(r.calcStart, r.calcEnd));
+      });
+      wrap.innerHTML = `<div>مجموع الأيام: ${daysSum}</div><div>أيام التحاسب (محسوبة): ${calcDaysSum}</div><div>الإجمالي: ${total}</div>`;
+    } else {
+      wrap.innerHTML = `<div>الإجمالي: ${total}</div>`;
+    }
+    return wrap;
+  }
+
+  function cashReport(list){
+    reportTitle.textContent = "تقرير الصندوق";
+    buildMeta(list);
+
+    const rows = list.map(r=>({
+      "تاريخ الدفع": r.payDate || "",
+      "رقم الاعتماد": r.credit || "",
+      "المبلغ": r.amount || "",
+      "البيان النصي": statement(r),
+      "اسم الصنف": r.itemName || "",
+      "اسم المانح": r.donorName || "",
+      "المقاول": r.contractorName || "",
+      "المصروفات: الميزان": r.exp_balance || "",
+      "المصروفات: أجرة النقل": r.exp_transport || "",
+      "المصروفات: البياتات": r.exp_overnight || "",
+      "المصروفات: تنسيقات": r.exp_formatting || ""
+    }));
+
+    reportBody.innerHTML = "";
+    if(rows.length){
+      reportBody.appendChild(makeTable(Object.keys(rows[0]), rows));
+    } else {
+      reportBody.innerHTML = `<div class="muted">لا توجد بيانات مطابقة لهذا الفلتر.</div>`;
+    }
+    reportBody.appendChild(totalsBox(list));
+  }
+
+  function carReport(list){
+    const car = $("fltCar").value.trim();
+    reportTitle.textContent = car ? `تقرير السيارة: ${car}` : "تقرير السيارة";
+    buildMeta(list);
+
+    const rows = list.map(r=>({
+      "المشروع/الموقع": r.project || "",
+      "تاريخ الدفع": r.payDate || "",
+      "رقم الاعتماد": r.credit || "",
+      "بداية الاحتساب": r.calcStart || "",
+      "تاريخ التحاسب": r.calcEnd || "",
+      "عدد الأيام": r.days || "",
+      "أيام التحاسب (محسوبة)": diffDaysISO(r.calcStart, r.calcEnd) || "",
+      "المبلغ": r.amount || "",
+      "المانح": r.donorName || "",
+      "المقاول": r.contractorName || "",
+      "الحالة": r.status || ""
+    }));
+
+    reportBody.innerHTML = "";
+    if(rows.length){
+      reportBody.appendChild(makeTable(Object.keys(rows[0]), rows));
+    } else {
+      reportBody.innerHTML = `<div class="muted">لا توجد بيانات مطابقة لهذا الفلتر.</div>`;
+    }
+    reportBody.appendChild(totalsBox(list, true));
+  }
+
+  function creditReport(list){
+    const credit = $("fltCredit").value.trim();
+    reportTitle.textContent = credit ? `تقرير رقم الاعتماد: ${credit}` : "تقرير رقم الاعتماد";
+    buildMeta(list);
+
+    const rows = list.map(r=>({
+      "تاريخ الدفع": r.payDate || "",
+      "رقم الاعتماد": r.credit || "",
+      "رقم السيارة": r.carNo || "",
+      "المشروع/الموقع": r.project || "",
+      "المبلغ": r.amount || "",
+      "البيان النصي": statement(r)
+    }));
+
+    reportBody.innerHTML = "";
+    if(rows.length){
+      reportBody.appendChild(makeTable(Object.keys(rows[0]), rows));
+    } else {
+      reportBody.innerHTML = `<div class="muted">لا توجد بيانات مطابقة لهذا الفلتر.</div>`;
+    }
+    reportBody.appendChild(totalsBox(list));
+  }
+
+  function updateKPIs(list){
+    $("kpiCount").textContent = list.length;
+    $("kpiSum").textContent = sumAmount(list).toLocaleString("en-US");
+  }
+
+  $("btnCalcTotal").onclick = ()=>{
+    const list = filtered();
+    updateKPIs(list);
+    setStatus("تم حساب الإجمالي ✅");
+  };
+
+  $("btnClearFilters").onclick = ()=>{
+    $("fltFrom").value = "";
+    $("fltTo").value = "";
+    $("fltCredit").value = "";
+    $("fltCar").value = "";
+    updateKPIs(filtered());
+    setStatus("تم مسح الفلاتر ✅");
+  };
+
+  $("btnMakeReport").onclick = ()=>{
+    const list = filtered();
+    updateKPIs(list);
+
+    const t = $("reportType").value;
+    reportArea.style.display = "block";
+    if(t==="cash") cashReport(list);
+    else if(t==="car") carReport(list);
+    else if(t==="credit") creditReport(list);
+    else cashReport(list);
+
+    reportArea.scrollIntoView({behavior:"smooth", block:"start"});
+    setStatus("تم توليد التقرير ✅");
+  };
+
+  // ========= Export =========
+  function exportExcel(){
+    if(reportArea.style.display==="none"){
+      alert("اذهب إلى تبويب التقارير وولّد تقريراً أولاً.");
+      return;
+    }
+    const table = reportArea.querySelector("table");
+    if(!table){
+      alert("لا يوجد جدول داخل التقرير لتصديره.");
+      return;
+    }
+    const ws = XLSX.utils.table_to_sheet(table);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Report");
+    XLSX.writeFile(wb, (reportTitle.textContent || "تقرير") + ".xlsx");
+  }
+
+  function exportPDF(){
+    if(reportArea.style.display==="none"){
+      alert("اذهب إلى تبويب التقارير وولّد تقريراً أولاً.");
+      return;
+    }
+    const opt = {
+      margin: 10,
+      filename: (reportTitle.textContent || "تقرير") + ".pdf",
+      image: { type:'jpeg', quality:0.98 },
+      html2canvas: { scale:2, useCORS:true },
+      jsPDF: { unit:'mm', format:'a4', orientation:'portrait' }
+    };
+    html2pdf().set(opt).from(reportArea).save();
+  }
+
+  function printReport(){
+    if(reportArea.style.display==="none"){
+      alert("اذهب إلى تبويب التقارير وولّد تقريراً أولاً.");
+      return;
+    }
+    const w = window.open("", "_blank");
+    w.document.write(`
+      <html dir="rtl" lang="ar"><head><meta charset="utf-8"/>
+      <title>طباعة التقرير</title>
+      <style>
+        body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:18px}
+        table{width:100%;border-collapse:collapse}
+        th,td{border:1px solid #e5e7eb;padding:8px;text-align:right;font-size:12px;vertical-align:top}
+        th{background:#f8fafc}
+      </style></head><body>${reportArea.outerHTML}</body></html>
+    `);
+    w.document.close();
+    w.focus();
+    w.print();
+  }
+
+  $("btnExportExcel").onclick = exportExcel;
+  $("btnExportPDF").onclick = exportPDF;
+  $("btnPrint").onclick = printReport;
+
+  // ========= Save/Load JSON (optional) =========
+  function saveJson(){
+    const blob = new Blob([JSON.stringify({version:1, data}, null, 2)], {type:"application/json;charset=utf-8"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "بيانات_تقارير_الصندوق.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function loadJsonFile(file){
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      try{
+        const obj = JSON.parse(reader.result);
+        if(obj && Array.isArray(obj.data)){
+          data = obj.data;
+          selectedId = null;
+          clearForm();
+          renderTable();
+          setStatus("تم استيراد JSON ✅");
+        } else {
+          alert("ملف JSON غير صحيح.");
+        }
+      }catch(e){
+        alert("لم أستطع قراءة JSON.");
+      }
+    };
+    reader.readAsText(file, "utf-8");
+  }
+
+  $("btnSaveJson").onclick = saveJson;
+  $("btnLoadJson").onclick = ()=> $("jsonInput").click();
+  $("jsonInput").addEventListener("change", (e)=>{
+    const f = e.target.files?.[0];
+    if(f) loadJsonFile(f);
+  });
+
+  // ========= Init =========
+  clearForm();
+  renderTable();
+  updateKPIs(filtered());
+  setDataPill();
+</script>
+</body>
+</html>
